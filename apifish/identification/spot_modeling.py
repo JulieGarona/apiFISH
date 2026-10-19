@@ -1108,8 +1108,13 @@ def _fit_subpixel_3d(
             coord_x += bbox_low[2]
         new_coord = [coord_z, coord_y, coord_x]
 
-    # if a spot is ill-conditioned, we simply keep its original coordinates
     except RuntimeError:
+        new_coord = list(coord)
+
+    except ValueError as error:
+        if str(error) != "`x0` is infeasible.":
+            raise
+
         new_coord = list(coord)
 
     return new_coord
