@@ -998,6 +998,9 @@ def fit_subpixel(image, spots, voxel_size, spot_radius):
     radius = [np.sqrt(ndim) * r for r in radius_pixel]
     radius = tuple(radius)
 
+    # Count caught 3D fitting failures once per image/call.
+    fit_stats = {"runtime_error": 0, "infeasible_initial_guess": 0}
+
     # loop over every spot
     spots_subpixel = []
     for coord in spots[:, :ndim]:
@@ -1012,6 +1015,7 @@ def fit_subpixel(image, spots, voxel_size, spot_radius):
                 voxel_size_yx=voxel_size[-1],
                 spot_radius_z=spot_radius[0],
                 spot_radius_yx=spot_radius[-1],
+                stats=fit_stats,
             )
         else:
             subpixel_coord = _fit_subpixel_2d(
@@ -1022,6 +1026,15 @@ def fit_subpixel(image, spots, voxel_size, spot_radius):
                 spot_radius_yx=spot_radius[-1],
             )
         spots_subpixel.append(subpixel_coord)
+
+    if ndim == 3:
+        failed = fit_stats["runtime_error"] + fit_stats["infeasible_initial_guess"]
+        print(
+            f"$ apiFISH 3D Gaussian fits: {failed}/{len(spots)} failed "
+            f"(infeasible initial guess: {fit_stats['infeasible_initial_guess']}; "
+            f"RuntimeError: {fit_stats['runtime_error']}). "
+            "Initial coordinates kept for failed fits."
+        )
 
     # format results
     spots_subpixel = np.stack(spots_subpixel)
@@ -1041,6 +1054,7 @@ def _fit_subpixel_3d(
     voxel_size_yx,
     spot_radius_z,
     spot_radius_yx,
+    stats=None,
 ):
     """Fit a 3-d gaussian on a detected spot.
 
@@ -1109,12 +1123,16 @@ def _fit_subpixel_3d(
         new_coord = [coord_z, coord_y, coord_x]
 
     except RuntimeError:
+        if stats is not None:
+            stats["runtime_error"] += 1
         new_coord = list(coord)
 
     except ValueError as error:
         if str(error) != "`x0` is infeasible.":
             raise
 
+        if stats is not None:
+            stats["infeasible_initial_guess"] += 1
         new_coord = list(coord)
 
     return new_coord
